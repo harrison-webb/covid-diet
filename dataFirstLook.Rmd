@@ -1,0 +1,52 @@
+---
+title: "Looking at the Data"
+output: html_notebook
+---
+
+# Creating data frames for each csv file
+```{r}
+#percentage of fat intake from different food categories for different countries
+fatIntake <- read.csv(file = "data/Fat_Supply_Quantity_Data.csv")
+
+#percentage of total food intake by weight from different food categories for different countries
+foodIntakeWeight <- read.csv(file = "data/Food_Supply_Quantity_kg_Data.csv")
+
+#percentage of total calories from different food categories for different countries
+calorieIntake <- read.csv(file = "data/Food_Supply_kcal_Data.csv")
+
+#percentage of protein intake from different food categories for different countries
+proteinIntake <- read.csv(file = "data/Protein_Supply_Quantity_Data.csv")
+```
+
+# Covid Cases by Country
+```{r}
+library(ggplot2)
+
+#plot 
+```
+
+# Covid Deaths by Country
+```{r}
+
+```
+
+# Obesity Rate by Country
+```{r}
+
+```
+
+# Malnourished Rate by Country
+```{r}
+
+```
+
+# Percentage of Calorie Intake from Animal Products by Country
+```{r}
+
+```
+
+# Percentage of Calorie intake from Vegetables by Country
+```{r}
+
+```
+
