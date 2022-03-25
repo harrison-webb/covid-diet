@@ -20,10 +20,27 @@ proteinIntake <- read.csv(file = "data/Protein_Supply_Quantity_Data.csv")
 
 # Covid Cases by Country
 ```{r}
-library(ggplot2)
+#https://r-spatial.org/r/2018/10/25/ggplot2-sf.html
+library("ggplot2")
+theme_set(theme_bw())
+library("sf")
+library("rnaturalearth")
+library("rnaturalearthdata")
+library(dplyr)
 
+world <- ne_countries(type = "countries", scale = "medium", returnclass = "sf")
+
+geoData <- inner_join(world, calorieIntake, by = c("name_sort" = "Country"))
+
+ggplot(data = geoData) + geom_sf(aes(fill = Confirmed)) +
+    scale_fill_viridis_c(option = "magma")
 #plot 
 ```
+
+```{r}
+plot(Confirmed~Obesity, data = calorieIntake, pch = 18)
+```
+
 
 # Covid Deaths by Country
 ```{r}
