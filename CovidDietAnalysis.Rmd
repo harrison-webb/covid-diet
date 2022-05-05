@@ -1,0 +1,343 @@
+---
+title: "Investigation of Relationship Between COVID-19 and Lifestyle"
+author: "Harrison Webb"
+date: '2022-05-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+#https://r-spatial.org/r/2018/10/25/ggplot2-sf.html
+library("ggplot2")
+theme_set(theme_bw())
+library("sf")
+library("rnaturalearth")
+library("rnaturalearthdata")
+library(dplyr)
+library(ggrepel)
+library(ggpubr)
+library(cowplot)
+```
+MATH 3080 Term Project Spring 2022
+
+
+<p align="center">
+
+  <img src="https://www.mashed.com/img/gallery/popular-foods-that-were-deemed-terrible-for-your-health-this-past-decade/intro-1576098544.jpg" alt="Fruits and veggies next to popcorn, donuts, chocolate, and hamburgers" height="70%">
+
+</p>
+
+## Introduction
+The current Coronavirus pandemic needs no introduction. We have been living with this virus since spring 2020 and have seen the pandemic progress from "seven days to flatten the curve", to lockdowns, to the optimistic release of a vaccine, to the unfortunate realization that the vaccine is not 100% effective. Throughout all of this much of the popular discourse and reporting has been focused around different medical treatments: the development of the vaccine, different vaccine types, boosters, and different types of treatments. While these topics took the spotlight, I found that questions about factors relating to personal health were not discussed as frequently. In this report, I will take an objective look at how or if diet/lifestyle playes a role in the spread and disease outcomes of COVID-19. It is my hope that this analysis can shine some light on this less-discussed side of COVID-19 and inform how future pandemics are approached from a individual health aspect.  
+
+## Data Used
+The data I am using comes from the [COVID-19 Healthy Diet Dataset](https://www.kaggle.com/datasets/mariaren/covid19-healthy-diet-dataset), published on Kaggle by Maria Ren. This dataset contains information about the diets, obesity levels, malnourishment levels, and covid cases of countries around the world. I chose this dataset because it contains lots of great data, has been cleaned well, is open-source on Kaggle, and is about a topic that I personally find interesting.  
+The data is organized into four main files:  
+
+* [Fat_Supply_Quantity_Data.csv](https://www.kaggle.com/datasets/mariaren/covid19-healthy-diet-dataset?select=Fat_Supply_Quantity_Data.csv)
+* [Food_Supply_Quantity_kg_Data.csv](https://www.kaggle.com/datasets/mariaren/covid19-healthy-diet-dataset?select=Food_Supply_Quantity_kg_Data.csv)
+* [Food_Supply_kcal_Data.csv](https://www.kaggle.com/datasets/mariaren/covid19-healthy-diet-dataset?select=Food_Supply_kcal_Data.csv)
+* [Protein_Supply_Quantity_Data.csv](https://www.kaggle.com/datasets/mariaren/covid19-healthy-diet-dataset?select=Protein_Supply_Quantity_Data.csv)
+
+In Fat_Supply_Quantity_Data.csv, there are multiple columns for 'percentage of fat intake' for multiple different food categories, some of which are alcoholic beverages, seed oils, animal products, and vegetables. There are also columns for obesity rate, undernourished rate, percentage of confirmed covid cases, percentage of covid deaths, percentage of population recovered from covid, percentage of active covid cases, and population. There are 170 rows, each for a different country.
+
+In Food_Supply_Quantity_kg_Data.csv, the data is generally the same as Fat_Supply_Quantity_Data.csv except columns follow the format 'percentage of food intake (kg) from [food category]'. Food_Supply_kcal_Data.csv and Protein_Supply_Quantity_Data.csv follow the same pattern, with the formats 'percentage of food intake (kcal) from [food category]' and 'percentage of protein intake from [food category]', respectively.
+
+The primary data I use comes from Food_Supply_kcal_Data.csv, as I am interested in overall diet trends and grouping the data this way does a good job of 'normalizing' for calorie density. For example, if we look at a population that consumes a large amount of processed foods through the lens of food consumed in kg, the population would appear to consume very small amounts of unhealthy oils. However, in reality the population would likely be consuming a large percentage of their calories from oils, because oil is such a calorie-dense food. Therefore, I will primarily look at the *percentage of calories* that come from different food groups.
+
+My last remark about this data is regarding the date of collection. According to the Kaggle page, the most recent data in the dataset is from 6 February, 2021. An unfortunate aspect of this collection date is that some places did not experience a true "first wave" until after this date. One example of this is Australia, which had minimal covid transmission until a large spike starting January 2022 (source: Google Coronavirus Statistics). Though more recent data would be interesting to analyze, it is convenient that this data was collected when it was because it will not be necessary to account for the influence of vaccinations on covid outcomes (according to Our World in Data, only 1.45 vaccine doses were administered per 100 people worldwide. See [How many vaccine doses have been administered in the last 12 months?](https://ourworldindata.org/explorers/coronavirus-data-explorer?zoomToSelection=true&facet=none&pickerSort=asc&pickerMetric=location&hideControls=true&Metric=Vaccine+doses&Interval=12-month+rolling+total&Relative+to+Population=true&Color+by+test+positivity=false&country=~OWID_WRL))
+
+## First Steps Looking at Data  
+The first things to do when dealing with a large data set like this are to read in the data so that we can work with it and take a look at some high level, "big picture" visualizations. First, let's read in the data using the read.csv() function, then we will simply plot the rates of covid cases in different countries using a chloropleth map.  
+
+```{r, include=FALSE}
+#percentage of fat intake from different food categories for different countries
+fatIntake <- read.csv(file = "data/Fat_Supply_Quantity_Data.csv")
+
+#percentage of total food intake by weight from different food categories for different countries
+foodIntakeWeight <- read.csv(file = "data/Food_Supply_Quantity_kg_Data.csv")
+
+#percentage of total calories from different food categories for different countries
+calorieIntake <- read.csv(file = "data/Food_Supply_kcal_Data.csv")
+
+#percentage of protein intake from different food categories for different countries
+proteinIntake <- read.csv(file = "data/Protein_Supply_Quantity_Data.csv")
+```
+
+```{r, echo=FALSE, out.width='85%', fig.align='center'}
+world <- ne_countries(type = "countries", scale = "medium", returnclass = "sf")
+
+geoData <- inner_join(world, calorieIntake, by = c("name_sort" = "Country"))
+
+ggplot(data = geoData) + geom_sf(aes(fill = Confirmed)) +
+    scale_fill_viridis_c(option = "magma") + ggtitle("Confirmed Covid Cases by Country (% of population)")
+```
+</br>
+Here we can see that America, Spain, Portugal, and Brazil are some of the countries with noticeably high case numbers. We also see that a couple countries are missing from the data (Venezuela, some African countries).  
+Breaking down the top 10 countries by confirmed cases we have:
+
+| Country | COVID Cases (% of population) |
+|:---:|:---:|
+| Montenegro | 10.408 |
+| Czechia | 9.613 |
+| Slovenia | 8.236 |
+| United States | 8.160 |
+| Luxembourg | 8.151 |
+| Panama | 7.622 |
+| Israel | 7.439 |
+| Portugal | 7.430 |
+| Georgia | 7.042 |
+| Lithuania | 6.667 |
+
+With this map and table in mind, we have a good overview of the data and a good starting point.
+
+
+## Analysis Overview  
+The topics I will be looking at (in relation to covid cases and covid deaths) are  
+
+* Obesity Rate
+* Undernourished
+* Animal Products Intake
+* Alcohol Intake
+* Fruit Intake
+* Vegetable Intake
+* Sugar Intake
+* Vegetable Oil Intake
+
+-------------------------
+
+
+# Graphs  
+</br>
+
+## COVID-19 by Obesity Rate  
+First we will look at covid cases vs country obesity rate and covid deaths vs country obesity rate.
+
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="85%", warning=FALSE}
+obesityCasePlot <- ggplot(data = calorieIntake, aes(x=Obesity, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of population) vs Obesity Rate (% of population)\n by Country") +
+   geom_smooth(method = lm)
+
+obesityCasePlot
+```
+</br>
+Clearly this linear model is not a great fit to the data, but it is useful in that it indicates a positive relationship between covid cases and obesity rates.  
+
+Now let's look at covid deaths vs obesity rates:
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="85%", warning=FALSE}
+obesityDeathPlot <- ggplot(data = calorieIntake, aes(x=Obesity, y=Deaths, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of population) vs Obesity Rate (% of population)\n by Country")+
+   geom_smooth(method = lm)
+
+obesityDeathPlot
+```
+</br>
+A similar story as above: the result is a very loosely fit trendline indicating a positive relationship between obesity rate and covid deaths.  
+
+It is useful to see that there is somewhat of a positive correlation between covid rates/deaths and obesity rate, but there are so many contributing factors to obesity rate, so it makes sense to see such high variability in the data.  
+
+</br>  
+
+## COVID-19 by Undernourished Rate  
+An issue we run into when looking at undernourished rate, is there are many data entries of "<2.5%". This causes R to treat this as a categorical column and causes all sorts of weirdness. So, we will replace all instances of "<2.5%" with 1, and change the column back to 'numeric'. This will make graphing easier and shouldn't have too much of an effect on the data.
+
+```{r}
+calorieIntake$Undernourished[calorieIntake$Undernourished == "<2.5"] = 1
+calorieIntake$Undernourished <- as.numeric(as.character(calorieIntake$Undernourished))
+```
+
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+undernourishedCasePlot <- ggplot(data = calorieIntake, aes(x=Undernourished, y=Confirmed, label=Country)) +
+   geom_point() + 
+   ggtitle("Confirmed Covid Cases (% of pop.) \nvs Undernourished Rate (% of pop.)\n by Country") + 
+   geom_smooth(method = lm) +
+   geom_label_repel(size=3, label.size = 0, min.segment.length = 0)
+   
+undernourishedDeathPlot <- ggplot(data = calorieIntake, aes(x=Undernourished, y=Deaths, label=Country)) +
+   geom_point() + 
+   ggtitle("Confirmed Covid Deaths (% of pop.) \nvs Undernourished Rate (% of pop.)\n by Country") + 
+   geom_smooth(method = lm) +
+   geom_label_repel(size=3, label.size = 0, min.segment.length = 0)
+
+
+plot_grid(undernourishedCasePlot, undernourishedDeathPlot)
+```
+
+There is clearly a negative relationship between the percentage of population which is undernourished vs covid cases/deaths. This is quite surprising to me because I figured that high undernourished rate would mean individuals in these countries would have weaker immune systems on average. However, one explanation could be that countries with high undernourished rates do not see much international travel and therefore did not see covid-positive individuals entering their borders very frequently, leading to fewer cases/deaths.  
+
+</br>  
+
+## COVID-19 by Percentage of Calories from Animal Products  
+This was another area I was interested in investigating. These days many people talk about the benefits of plant-based diets, so I was interested to see if there was any correlation with covid outcomes.
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+meatCasesPlot <- ggplot(data = calorieIntake, aes(x=Animal.Products, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of pop.)\n vs Consumed Animal Products (% of kcal.)\n by Country")+
+   geom_smooth(method = lm)
+
+meatDeathsPlot <- ggplot(data = calorieIntake, aes(x=Animal.Products, y=Deaths, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of pop.)\n vs Consumed Animal Products (% of kcal.)\n by Country")+
+   geom_smooth(method = lm)
+
+plot_grid(meatCasesPlot, meatDeathsPlot)
+```
+
+</br>  
+
+## COVID-19 by Percentage of Calories from Alcohol  
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+alcoholCasesPlot <- ggplot(data = calorieIntake, aes(x=Alcoholic.Beverages, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of pop.)\n vs Consumed Alcohol (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+alcoholDeathsPlot <- ggplot(data = calorieIntake, aes(x=Alcoholic.Beverages, y=Deaths, label=Country))+
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of pop.)\n vs Consumed Alcohol (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+plot_grid(alcoholCasesPlot, alcoholDeathsPlot)
+```
+</br>  
+
+## COVID-19 by Percentage of Calories from Fruit  
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+fruitCasesPlot <- ggplot(data = calorieIntake, aes(x=Fruits...Excluding.Wine, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of pop.)\n vs Consumed Fruit (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+fruitDeathsPlot <- ggplot(data = calorieIntake, aes(x=Fruits...Excluding.Wine, y=Deaths, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of pop.)\n vs Consumed Fruit (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+plot_grid(fruitCasesPlot, fruitDeathsPlot)
+```
+</br>  
+
+## COVID-19 by Percentage of Calories from Vegetables  
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+vegetableCasesPlot <- ggplot(data = calorieIntake, aes(x=Vegetables, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of pop.)\n vs Consumed Vegetables (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+vegetableDeathsPlot <- ggplot(data = calorieIntake, aes(x=Vegetables, y=Deaths, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of pop.)\n vs Consumed Vegetables (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+plot_grid(vegetableCasesPlot, vegetableDeathsPlot)
+```
+</br>  
+
+## COVID-19 by Percentage of Calories from Sugar  
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+sugarCasesPlot <- ggplot(data = calorieIntake, aes(x=Sugar...Sweeteners, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of pop.)\n vs Consumed Sugar (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+sugarDeathsPlot <- ggplot(data = calorieIntake, aes(x=Sugar...Sweeteners, y=Deaths, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of pop.)\n vs Consumed Sugar (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+plot_grid(sugarCasesPlot, sugarDeathsPlot)
+```
+</br>  
+
+## COVID-19 by Percentage of Calories from Vegetable Oil  
+```{r, echo=FALSE, message=FALSE, fig.align='center', out.width="95%", warning=FALSE}
+vegOilCasesPlot <- ggplot(data = calorieIntake, aes(x=Vegetable.Oils, y=Confirmed, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Cases (% of pop.)\n vs Consumed Vegetable Oils (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+vegOilDeathsPlot <- ggplot(data = calorieIntake, aes(x=Vegetable.Oils, y=Deaths, label=Country)) +
+   geom_point() + 
+   geom_label_repel(label.size=0, label.padding=0, size=3, min.segment.length = 0) +
+   ggtitle("Confirmed Covid Deaths (% of pop.)\n vs Consumed Vegetable Oils (% of kcal)\n by Country")+
+   geom_smooth(method = lm)
+
+plot_grid(vegOilCasesPlot, vegOilDeathsPlot)
+```
+
+</br>
+
+All of the plots so far have been simple linear models, and while they have been useful and interesting in looking at 'fuzzy' trends, none have been a good fit to the data. The "big picture" is  
+
+| Independent Variable | Correlation with Covid cases/deaths | Cases Beta_1 | Deaths Beta_1 |
+|:---:|:---:|:---:|:---:|
+| Obesity Rate | Positive | 0.129 | 0.00250 |
+| Undernourished Rate | Negative | -0.09356 | -0.00181 |
+| Animal Product Consumption | Positive | 0.2831 | 0.00514 |
+| Alcohol Consumption | Positive | 1.129 | 0.02267 |
+| Fruit Consumption | None | -0.01338 | -0.00120 |
+| Vegetable Consumption | Positive | 0.748 | 0.0135 |
+| Sugar Consumption | Positive | 0.338 | 0.00696 |
+| Vegetable Oils | Positive | 0.266 | 0.00584 |
+
+
+(Beta_1 values calculated by hand using below code template; couldn't figure out a better way to do it)
+```{r, results='hide'}
+model <- lm(Deaths~Obesity, data=calorieIntake)
+model$coefficients[[2]]
+```
+
+
+## Multiple Linear Regression
+
+Now that we have calculated plenty of simple linear regressions, let's try a large multiple regression to see how the model behaves when taking everything into account. 
+
+```{r}
+multipleModelCases <- lm(Confirmed ~ Obesity*Animal.Products*Alcoholic.Beverages*Fruits...Excluding.Wine*Sugar...Sweeteners*Vegetable.Oils*Vegetables , data = calorieIntake)
+
+summary(multipleModelCases)$adj.r.squared
+```
+
+## Conclusion
+
+I think it is difficult to form a concrete takeaway here, other than that the COVID-19 pandemic and the health/diet habits of countries are both extremely complicated. I was able to uncover some interesting trends about the diet and lifestyle habits of different countries: like positive correlations between covid-19 cases/deaths and obesity rate, alcohol consumption, animal product consumption, vegetable consumption, vegetable oil consumption, sugar consumption, and negative correlations between covid-19 cases/deaths and undernourished rate and fruit consumption. As interesting as these are, I can't help but feel like these are simply factors that are being affected by other hidden variables.  
+
+Some possibilities for hidden variables that are influencing these results 'behind the scenes' include:  
+
+* Effectiveness of the covid responses of different countries
+* Tourism rate
+* GDP
+
+Each of these could be an entire separate project on it's own, but it is interesting food for thought for now. In the mean time I think it is safe to say that, although the pandemic seems to be winding down, it is always good to try to live healthy lifestyles and follow healthy diets whenever possible.
+
+
+## Sources/Resources Used
+### Sources:  
+https://ourworldindata.org/covid-vaccinations?country=OWID_WRL
+
+### Resources:  
+https://www.kaggle.com/datasets/mariaren/covid19-healthy-diet-dataset
+https://www.maths.usyd.edu.au/u/UG/SM/STAT3022/r/current/Misc/data-visualization-2.1.pdf
+https://r-spatial.org/r/2018/10/25/ggplot2-sf.html
+https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf
+https://www.youtube.com/watch?v=VZ4wclK1eCQ
+https://stackoverflow.com/questions/37707060/converting-data-frame-column-from-character-to-numeric
+
